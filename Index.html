@@ -1,0 +1,425 @@
+<!DOCTYPE html>
+<html lang="hi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Worker Attendance & History Portal</title>
+    <style>
+        * { box-sizing: border-box; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; margin: 0; padding: 0; }
+        body { background-color: #f0f2f5; padding: 20px; color: #333; }
+        .container { max-width: 1100px; margin: 0 auto; display: grid; grid-template-columns: 1fr 1.2fr; gap: 20px; }
+        @media (max-width: 900px) { .container { grid-template-columns: 1fr; } }
+        
+        .card { background: white; padding: 20px; border-radius: 10px; box-shadow: 0 4px 12px rgba(0,0,0,0.08); margin-bottom: 20px; }
+        h2 { margin-bottom: 15px; color: #1a73e8; font-size: 1.2rem; border-bottom: 2px solid #e8f0fe; padding-bottom: 8px; display: flex; justify-content: space-between; align-items: center; }
+        
+        .form-group { margin-bottom: 12px; }
+        label { display: block; font-weight: 600; margin-bottom: 5px; font-size: 0.88rem; color: #444; }
+        input[type="text"], input[type="date"], input[type="time"], textarea, select { width: 100%; padding: 8px; border: 1px solid #cccccc; border-radius: 6px; font-size: 0.9rem; }
+        input:focus, textarea:focus, select:focus { outline: none; border-color: #1a73e8; }
+        
+        .checkbox-group { display: flex; align-items: center; gap: 8px; margin-top: 5px; }
+        .checkbox-group input { width: auto; transform: scale(1.1); cursor: pointer; }
+        
+        button { background-color: #1a73e8; color: white; border: none; padding: 10px 15px; border-radius: 6px; cursor: pointer; font-weight: bold; width: 100%; font-size: 0.95rem; transition: background 0.2s; }
+        button:hover { background-color: #1557b0; }
+        button.btn-success { background-color: #28a745; }
+        button.btn-success:hover { background-color: #218838; }
+        button.btn-whatsapp { background-color: #25D366; font-size: 1rem; margin-top: 10px; }
+        button.btn-whatsapp:hover { background-color: #1eb954; }
+        button.btn-danger { background-color: #dc3545; padding: 4px 8px; width: auto; font-size: 0.8rem; }
+        
+        .worker-select-list { max-height: 250px; overflow-y: auto; border: 1px solid #dcdcdc; padding: 8px; border-radius: 6px; background: #fafafa; }
+        .worker-row { background: #fff; border: 1px solid #eee; padding: 8px; margin-bottom: 8px; border-radius: 6px; }
+        .worker-header { display: flex; align-items: center; gap: 8px; font-size: 0.95rem; }
+        .worker-custom-time { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; padding-top: 8px; border-top: 1px dashed #e0e0e0; align-items: center; }
+        .worker-custom-time input[type="time"] { font-size: 0.8rem; padding: 4px; }
+        
+        .worker-item { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; font-size: 0.95rem; background: #fff; padding: 6px 10px; border-radius: 4px; border: 1px solid #eee; }
+        
+        #outputReport { width: 100%; height: 180px; font-family: monospace; white-space: pre-wrap; background: #f0fff4; border: 1px solid #b7eb8f; padding: 10px; border-radius: 6px; margin-top: 10px; font-size: 0.9rem; }
+        
+        /* History & Search Section */
+        .history-card { border-top: 4px solid #1a73e8; }
+        .attendance-record { background: #f8f9fa; border: 1px solid #e9ecef; border-radius: 6px; padding: 12px; margin-bottom: 12px; }
+        .attendance-record header { display: flex; justify-content: space-between; align-items: center; font-weight: bold; color: #1a73e8; margin-bottom: 6px; border-bottom: 1px solid #dee2e6; padding-bottom: 4px; }
+        .attendance-record ul { padding-left: 20px; margin: 6px 0; font-size: 0.9rem; }
+        .attendance-record .details-text { font-size: 0.88rem; color: #555; background: #fff; padding: 6px; border-radius: 4px; margin-top: 6px; border-left: 3px solid #1a73e8; }
+        
+        .tab-buttons { display: flex; gap: 10px; margin-bottom: 15px; }
+        .tab-buttons button { background: #e4e6eb; color: #333; font-weight: normal; }
+        .tab-buttons button.active { background: #1a73e8; color: white; font-weight: bold; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <!-- Left Column: Master Worker Management & Attendance Input -->
+    <div>
+        <!-- Worker Master -->
+        <div class="card">
+            <h2>1. Worker Management</h2>
+            <div class="form-group" style="display: flex; gap: 8px;">
+                <input type="text" id="newWorkerName" placeholder="Naya worker ka naam...">
+                <button style="width: 120px;" onclick="addWorker()">Add</button>
+            </div>
+            <div id="masterWorkerList" style="max-height: 120px; overflow-y: auto;"></div>
+        </div>
+
+        <!-- Daily Attendance Form -->
+        <div class="card">
+            <h2>2. Daily Attendance Form</h2>
+            
+            <div style="display: flex; gap: 10px;">
+                <div class="form-group" style="flex: 1;">
+                    <label for="inTime">In Time:</label>
+                    <input type="time" id="inTime" value="09:00">
+                </div>
+                <div class="form-group" style="flex: 1;">
+                    <label for="outTime">Out Time:</label>
+                    <input type="time" id="outTime" value="18:00">
+                </div>
+            </div>
+
+            <div class="form-group checkbox-group" style="margin-bottom: 12px;">
+                <input type="checkbox" id="noLunch">
+                <label for="noLunch" style="margin:0; font-weight: normal;"><strong>No Lunch</strong> (Sabhi par apply hoga)</label>
+            </div>
+
+            <div class="form-group">
+                <label>Workers Select Karein & Custom Details (Edit):</label>
+                <div class="worker-select-list" id="attendanceCheckboxes">
+                    <p style="color:#777;">Pehle worker add karein...</p>
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label for="attDate">Tarikh (Date):</label>
+                <input type="date" id="attDate">
+            </div>
+
+            <div class="form-group">
+                <label for="jobDetails">Job Details / Site Ka Naam:</label>
+                <textarea id="jobDetails" rows="2" placeholder="Jaise: Site A par wiring ka kaam..."></textarea>
+            </div>
+
+            <button class="btn-success" onclick="saveAndGenerateAttendance()">Save Attendance & Generate Report</button>
+        </div>
+
+        <!-- WhatsApp Output Box -->
+        <div class="card">
+            <h2>3. Generated WhatsApp Report</h2>
+            <textarea id="outputReport" readonly placeholder="Aapka latest report yahan dikhega..."></textarea>
+            <button class="btn-whatsapp" onclick="copyForWhatsApp()">WhatsApp Ke Liye Copy Karein</button>
+        </div>
+    </div>
+
+    <!-- Right Column: Attendance History & Past Days Search -->
+    <div>
+        <div class="card history-card">
+            <h2>4. Attendance History & Search</h2>
+            
+            <div class="tab-buttons">
+                <button id="tabDateBtn" class="active" onclick="switchTab('date')">Date-wise Search</button>
+                <button id="tabAllBtn" onclick="switchTab('all')">Sabhi Past Records</button>
+            </div>
+
+            <!-- Date Filter Section -->
+            <div id="dateSearchSection" class="form-group" style="background: #e8f0fe; padding: 12px; border-radius: 6px;">
+                <label for="searchDate">Purani Tarikh Select Karein:</label>
+                <div style="display: flex; gap: 8px;">
+                    <input type="date" id="searchDate" onchange="filterHistoryByDate()">
+                    <button style="width: 100px;" onclick="resetDateSearch()">Show All</button>
+                </div>
+            </div>
+
+            <!-- History List Container -->
+            <div id="historyContainer" style="max-height: 550px; overflow-y: auto; padding-right: 5px;">
+                <p style="color:#777; text-align: center;">Koi attendance record nahi milaa.</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    let workers = JSON.parse(localStorage.getItem('attendance_workers')) || [];
+    let attendanceHistory = JSON.parse(localStorage.getItem('attendance_history')) || [];
+
+    window.onload = function() {
+        document.getElementById('attDate').valueAsDate = new Date();
+        document.getElementById('searchDate').valueAsDate = new Date();
+        renderWorkers();
+        renderHistory(attendanceHistory);
+    };
+
+    function addWorker() {
+        const nameInput = document.getElementById('newWorkerName');
+        const name = nameInput.value.trim();
+        if (!name) return alert('Worker ka naam likhein!');
+        workers.push(name);
+        localStorage.setItem('attendance_workers', JSON.stringify(workers));
+        nameInput.value = '';
+        renderWorkers();
+    }
+
+    function deleteWorker(index) {
+        if(confirm("Kya aap is worker ko master list se hatana chahte hain?")) {
+            workers.splice(index, 1);
+            localStorage.setItem('attendance_workers', JSON.stringify(workers));
+            renderWorkers();
+        }
+    }
+
+    function renderWorkers() {
+        const masterList = document.getElementById('masterWorkerList');
+        const selectList = document.getElementById('attendanceCheckboxes');
+        masterList.innerHTML = '';
+        selectList.innerHTML = '';
+
+        if (workers.length === 0) {
+            masterList.innerHTML = '<p style="color:#777; font-size:0.85rem;">Koi worker nahi hai.</p>';
+            selectList.innerHTML = '<p style="color:#777; font-size:0.85rem;">Pehle worker add karein.</p>';
+            return;
+        }
+
+        workers.forEach((worker, index) => {
+            const mDiv = document.createElement('div');
+            mDiv.className = 'worker-item';
+            mDiv.innerHTML = `<span>${worker}</span> <button class="btn-danger" onclick="deleteWorker(${index})">Delete</button>`;
+            masterList.appendChild(mDiv);
+
+            const sDiv = document.createElement('div');
+            sDiv.className = 'worker-row';
+            sDiv.innerHTML = `
+                <div class="worker-header">
+                    <input type="checkbox" value="${worker}" id="chk_${index}">
+                    <label for="chk_${index}" style="margin:0; cursor:pointer; flex:1;"><strong>${worker}</strong></label>
+                    <label style="font-size:0.75rem; color:#666; display:flex; align-items:center; gap:3px;">
+                        <input type="checkbox" id="custom_edit_chk_${index}" onchange="toggleCustomEdit(${index})"> Edit Time/Lunch
+                    </label>
+                </div>
+                <div class="worker-custom-time" id="custom_edit_box_${index}" style="display:none;">
+                    <div style="flex:1; min-width: 90px;">
+                        <span style="font-size:0.75rem;">In:</span>
+                        <input type="time" id="custom_in_${index}">
+                    </div>
+                    <div style="flex:1; min-width: 90px;">
+                        <span style="font-size:0.75rem;">Out:</span>
+                        <input type="time" id="custom_out_${index}">
+                    </div>
+                    <div style="display:flex; align-items:center; gap:4px; margin-top:12px;">
+                        <input type="checkbox" id="custom_nolunch_${index}">
+                        <label for="custom_nolunch_${index}" style="font-size:0.75rem; margin:0; cursor:pointer;">No Lunch</label>
+                    </div>
+                </div>
+            `;
+            selectList.appendChild(sDiv);
+        });
+    }
+
+    function toggleCustomEdit(index) {
+        const box = document.getElementById(`custom_edit_box_${index}`);
+        const isChecked = document.getElementById(`custom_edit_chk_${index}`).checked;
+        box.style.display = isChecked ? 'flex' : 'none';
+        
+        if (isChecked) {
+            document.getElementById(`custom_in_${index}`).value = document.getElementById('inTime').value;
+            document.getElementById(`custom_out_${index}`).value = document.getElementById('outTime').value;
+            document.getElementById(`custom_nolunch_${index}`).checked = document.getElementById('noLunch').checked;
+        }
+    }
+
+    function formatTime(timeStr) {
+        if (!timeStr) return '';
+        let [hours, minutes] = timeStr.split(':');
+        hours = parseInt(hours);
+        const ampm = hours >= 12 ? 'PM' : 'AM';
+        hours = hours % 12 || 12;
+        return `${hours}:${minutes} ${ampm}`;
+    }
+
+    function saveAndGenerateAttendance() {
+        const selectedWorkerDetails = [];
+        const defaultIn = document.getElementById('inTime').value;
+        const defaultOut = document.getElementById('outTime').value;
+        const defaultNoLunch = document.getElementById('noLunch').checked;
+
+        workers.forEach((worker, index) => {
+            const isChecked = document.getElementById(`chk_${index}`).checked;
+            if (isChecked) {
+                const hasCustomEdit = document.getElementById(`custom_edit_chk_${index}`).checked;
+                let workerIn = defaultIn;
+                let workerOut = defaultOut;
+                let workerNoLunch = defaultNoLunch;
+
+                if (hasCustomEdit) {
+                    const cIn = document.getElementById(`custom_in_${index}`).value;
+                    const cOut = document.getElementById(`custom_out_${index}`).value;
+                    if (cIn) workerIn = cIn;
+                    if (cOut) workerOut = cOut;
+                    workerNoLunch = document.getElementById(`custom_nolunch_${index}`).checked;
+                }
+
+                selectedWorkerDetails.push({
+                    name: worker,
+                    inTime: formatTime(workerIn),
+                    outTime: formatTime(workerOut),
+                    noLunch: workerNoLunch,
+                    isCustom: hasCustomEdit
+                });
+            }
+        });
+
+        if (selectedWorkerDetails.length === 0) {
+            return alert('Kripya kam se kam ek worker select karein!');
+        }
+
+        const rawDate = document.getElementById('attDate').value;
+        if (!rawDate) return alert('Tarikh chunein!');
+
+        const formattedDate = rawDate.split('-').reverse().join('-');
+        const jobDetails = document.getElementById('jobDetails').value.trim() || 'N/A';
+
+        let report = `📋 *DAILY ATTENDANCE REPORT*\n`;
+        report += `📝 *Job Details:* ${jobDetails}\n`;
+        report += `📅 *Date:* ${formattedDate}\n`;
+        report += `⏰ *Time:* ${formatTime(defaultIn)} - ${formatTime(defaultOut)}\n`;
+        report += `🍱 *No Lunch:* ${defaultNoLunch ? 'Haan (Yes)' : 'Nahi (No)'}\n`;
+        report += `-----------------------------------\n`;
+        report += `👷‍♂️ *Workers (${selectedWorkerDetails.length}):*\n`;
+        
+        selectedWorkerDetails.forEach((w, i) => {
+            let extraInfo = [];
+            if (w.inTime !== formatTime(defaultIn) || w.outTime !== formatTime(defaultOut)) {
+                extraInfo.push(`${w.inTime} - ${w.outTime}`);
+            }
+            if (w.noLunch !== defaultNoLunch) {
+                extraInfo.push(w.noLunch ? 'No Lunch' : 'With Lunch');
+            }
+
+            if (extraInfo.length > 0) {
+                report += `  ${i + 1}. ${w.name} (*${extraInfo.join(' | ')}*)\n`;
+            } else {
+                report += `  ${i + 1}. ${w.name}\n`;
+            }
+        });
+
+        document.getElementById('outputReport').value = report;
+
+        const newRecord = {
+            id: Date.now(),
+            rawDate: rawDate,
+            formattedDate: formattedDate,
+            defaultIn: formatTime(defaultIn),
+            defaultOut: formatTime(defaultOut),
+            defaultNoLunch: defaultNoLunch,
+            workers: selectedWorkerDetails,
+            jobDetails: jobDetails,
+            whatsappText: report
+        };
+
+        attendanceHistory.unshift(newRecord);
+        localStorage.setItem('attendance_history', JSON.stringify(attendanceHistory));
+
+        filterHistoryByDate();
+        alert('Attendance successfully save ho gayi hai!');
+    }
+
+    function renderHistory(records) {
+        const container = document.getElementById('historyContainer');
+        container.innerHTML = '';
+
+        if (records.length === 0) {
+            container.innerHTML = '<p style="color:#777; text-align:center; padding: 20px;">Is tarikh ka koi record nahi milaa.</p>';
+            return;
+        }
+
+        records.forEach(rec => {
+            const card = document.createElement('div');
+            card.className = 'attendance-record';
+
+            let workersListHtml = rec.workers.map(w => {
+                let tags = [];
+                if (w.inTime !== rec.defaultIn || w.outTime !== rec.defaultOut) {
+                    tags.push(`${w.inTime} - ${w.outTime}`);
+                }
+                if (w.noLunch !== rec.defaultNoLunch) {
+                    tags.push(w.noLunch ? 'No Lunch' : 'With Lunch');
+                }
+                const infoText = tags.length > 0 ? `<span style="color:#1a73e8; font-size:0.85rem;">(${tags.join(' | ')})</span>` : '';
+                return `<li><strong>${w.name}</strong> ${infoText}</li>`;
+            }).join('');
+
+            card.innerHTML = `
+                <header>
+                    <span>📅 Date: ${rec.formattedDate}</span>
+                    <button class="btn-danger" onclick="deleteHistoryRecord(${rec.id})">Delete</button>
+                </header>
+                <div class="details-text" style="margin-top: 0; margin-bottom: 6px;"><strong>Job Details:</strong> ${rec.jobDetails}</div>
+                <div><strong>Time:</strong> ${rec.defaultIn || 'N/A'} - ${rec.defaultOut || 'N/A'} | <strong>No Lunch:</strong> ${rec.defaultNoLunch ? 'Haan' : 'Nahi'}</div>
+                <div style="margin-top: 4px;"><strong>Workers (${rec.workers.length}):</strong></div>
+                <ul>${workersListHtml}</ul>
+                <button class="btn-whatsapp" style="padding:6px; font-size:0.85rem; margin-top:8px;" onclick="copySavedText(\`${encodeURIComponent(rec.whatsappText)}\`)">Copy WhatsApp Report</button>
+            `;
+            container.appendChild(card);
+        });
+    }
+
+    function filterHistoryByDate() {
+        const selectedDate = document.getElementById('searchDate').value;
+        if (!selectedDate) {
+            renderHistory(attendanceHistory);
+            return;
+        }
+        const filtered = attendanceHistory.filter(item => item.rawDate === selectedDate);
+        renderHistory(filtered);
+    }
+
+    function resetDateSearch() {
+        document.getElementById('searchDate').value = '';
+        renderHistory(attendanceHistory);
+    }
+
+    function deleteHistoryRecord(id) {
+        if (confirm("Kya aap is attendance record ko history se hatana chahte hain?")) {
+            attendanceHistory = attendanceHistory.filter(rec => rec.id !== id);
+            localStorage.setItem('attendance_history', JSON.stringify(attendanceHistory));
+            filterHistoryByDate();
+        }
+    }
+
+    function switchTab(tab) {
+        if (tab === 'date') {
+            document.getElementById('tabDateBtn').className = 'active';
+            document.getElementById('tabAllBtn').className = '';
+            document.getElementById('dateSearchSection').style.display = 'block';
+            filterHistoryByDate();
+        } else {
+            document.getElementById('tabDateBtn').className = '';
+            document.getElementById('tabAllBtn').className = 'active';
+            document.getElementById('dateSearchSection').style.display = 'none';
+            renderHistory(attendanceHistory);
+        }
+    }
+
+    function copyForWhatsApp() {
+        const reportText = document.getElementById('outputReport');
+        if (!reportText.value) return alert('Pehle attendance report generate karein!');
+        copyToClipboard(reportText.value);
+    }
+
+    function copySavedText(encodedText) {
+        copyToClipboard(decodeURIComponent(encodedText));
+    }
+
+    function copyToClipboard(text) {
+        navigator.clipboard.writeText(text).then(() => {
+            alert('WhatsApp Text Copy Ho Gaya!');
+        }).catch(err => {
+            alert('Copy karne me error aaya, manually copy karein.');
+        });
+    }
+</script>
+
+</body>
+</html>
